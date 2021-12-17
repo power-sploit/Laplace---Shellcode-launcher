@@ -22,11 +22,34 @@ Por ahora, este launcher planteará lo siguiente:
 
 - Persistencia: Encontrar una manera no sospechosa de que Laplace pueda ser iniciado junto al sistema operativo para volver a cargar el payload
 
+- Bind en ejecutable legítimo: Para que el usuario no sospeche
+
 - Y mucho más que puede venir en las próximas actualizaciones, cuando termine de estudiar sobre este tema ;-)
 
 **Estado actual [17 de Diciembre de 2021]**
 
 Se está desarrollando un Bypass VM sin tener en cuenta todo lo anteriormente dicho, ya que no se necesitan conocimientos especiales para detectar una máquina virtual. Tened paciencia, todo será implementado un día.
 
+**Requisitos de ejecución**
+
+- Windows Vista o superior
+- Por ahora, arquitectura de 32 bits
+
+**Como compilar en Visual Studio**
+
+-Próximamente
+
+
+**Contacto**
+
+Si necesitas ayuda, o tienes un aporte, puedes escribirme en Discord. Tolaju#0001 [O cuando se me acabe el Nitro] Tolaju#2311
+
+Mi canal de YouTube: https://youtube.com/c/Tolaju
+
+Twitter: https://www.twitter.com/Tolaju
+
+Telegram:
+
+https://t.me/Tolaju
 
 
