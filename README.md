@@ -18,7 +18,7 @@ Por ahora, este launcher planteará lo siguiente:
 
 - Bypass VM: No es deseado que Laplace sea ejecutado en una máquina virtual para ser expuesto a debugs, análisis de memoria forense, Ingenieria inversa u otros análisis.
 
-- Bypass EDR: no es deseado que los EDR de los antivirus detecten las llamadas maliciosas para inyectar código o para otras actividades sospechosas. Serán usadas principalmente "Syscalls"
+- Bypass EDR: no es deseado que los EDR de los antivirus detecten las llamadas maliciosas para inyectar código o para otras actividades sospechosas. Serán usadas principalmente "Syscalls", a pesar de su inestabilidad
 
 - Bypass AMSI: El Launcher tratará de no tocar disco ni tocar lo que más analiza el antivirus (Fileless), y tratar de bypassear el AMSI para que esto pueda ser realizado con éxito.
 
