@@ -24,3 +24,9 @@ Por ahora, este launcher planteará lo siguiente:
 
 - Y mucho más que puede venir en las próximas actualizaciones, cuando termine de estudiar sobre este tema ;-)
 
+**Estado actual [17 de Diciembre de 2021]**
+
+Se está desarrollando un Bypass VM sin tener en cuenta todo lo anteriormente dicho, ya que no se necesitan conocimientos especiales para detectar una máquina virtual. Tened paciencia, todo será implementado un día.
+
+
+
