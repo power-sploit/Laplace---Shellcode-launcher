@@ -28,6 +28,8 @@ Por ahora, este launcher planteará lo siguiente:
 
 - Bind en ejecutable legítimo: Para que el usuario no sospeche
 
+- Encripción de strings y descifrado del shellcode encriptado
+
 - Y mucho más que puede venir en las próximas actualizaciones, cuando termine de estudiar sobre este tema ;-)
 
 **Estado actual [17 de Diciembre de 2021]**
