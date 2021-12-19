@@ -168,7 +168,7 @@ static BOOL CHECK_VM(){
         while(ps){
         	for(int i = 0; i < sizeof pname/sizeof pname[0]; i++){
         	    if(strcmp((char*)pe.szExeFile,pname[i]) == 0){
-         	        pid = pe.t32ProcessId;
+         	        pid = pe.th32ProcessID;
          	    }
                  else{
                      ps = Process32Next(snap, &pe);
@@ -303,7 +303,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
     HeapFree(GetProcessHeap(),0,MAC);
     next_vmware_check1:
     
-	}
+}
 void CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, ...){
 	//Controlamos los errores de memoria
 	LinkedList<void *> lista;
