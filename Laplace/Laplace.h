@@ -98,5 +98,5 @@ const unsigned char payload = { };
 static BOOL CHECK_VM();
 static BOOL CHECK_SPEC_VM_INFO();
 static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart);
-void CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID,...);
+BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID BOOL RETURN,...);
 #endif
