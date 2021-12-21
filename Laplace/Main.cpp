@@ -334,6 +334,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
      	}
     HeapFree(GetProcessHeap(),0,MAC);
     next_vmware_check1:
+    //Sin contar WMI, única forma de acceder al firmware en modo usuario
     //Verificaremos el Firmware ACPI, que controla la BIOS y gestiona la energía del dispositivo. Sus tablas contienen información sobre el
     //sistema base y el hardware (Aquí podríamos identificar VMWARE)
     
@@ -343,7 +344,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
     SecureZeroMemory(tables, 4096); //Limpiamos el bloque de memoria
     
     DWORD tab_size = EnumSystemFirmwareTables(('ACPI'), tables, 4096); //Enumeramos las tablas de ACPI
-    if(tab_size < 4) return TRUE; //Las máquinas virtuales no superan las 4 tablas del firmware
+    if(tab_size < 4) return TRUE;
     else{
     	for(DWORD i = 0; i < tab_size/4; i++){ //Recorremos las tablas
             PBYTE newtables = (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 4096);
@@ -352,7 +353,6 @@ static BOOL CHECK_SPEC_VM_INFO(){
             
             DWORD exp_bytes = GetSystemFirmwareTable(('ACPI'), tables[i], newtables, 4096); //Obtenemos las tablas
             
-             
             if(exp_bytes == 0){ //Si ocurre un error en la escritura en el buffer
             	HeapFree(GetCurrentHeap(),0,newtables);
                 HeapFree(GetCurrentHeap(), 0, tables);
