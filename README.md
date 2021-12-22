@@ -30,6 +30,8 @@ Por ahora, este launcher planteará lo siguiente:
 
 - Encripción de strings y descifrado del shellcode encriptado
 
+- API Hashing: Para que a los investigadores les cueste más investigar las APIs llamadas
+
 - Y mucho más que puede venir en las próximas actualizaciones, cuando termine de estudiar sobre este tema ;-)
 
 **Estado actual [17 de Diciembre de 2021]**
