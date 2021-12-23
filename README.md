@@ -7,7 +7,7 @@ Laplace es un launcher/Stub externo de shellcode runtime en desarrollo por un au
 
 **¿Cómo será Laplace?**
 
-Laplace es un proyecto recién creado, por un novato del malware avanzado con ganas de aprender sobre este mundo. Por lo tanto, debéis tener en cuenta que
+Laplace es un proyecto (PoC malware) recién creado, por un novato del malware avanzado con ganas de aprender sobre este mundo. Por lo tanto, debéis tener en cuenta que
 este launcher ha sido creado por un novato, que está aprendiendo mientras desarrolla su proyecto.
 
 Por ahora, este launcher planteará lo siguiente:
