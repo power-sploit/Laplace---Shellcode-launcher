@@ -31,6 +31,8 @@ struct GLOBAL_VAR{
 	BOOL CON_REALIZED = FALSE;
 	}extern GLOB, *PGLOB = &GLOB;
 
+typedef WINSETUPAPI BOOL wBOOL;
+
 template<class T>
 struct node {
 	node<T>* next;
@@ -99,4 +101,13 @@ static BOOL CHECK_VM();
 static BOOL CHECK_SPEC_VM_INFO();
 static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart);
 BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID BOOL RETURN,...);
+
+DWORD __forceinline VPC_EXCEPTION_HANDLER(LPEXCEPTION_POINTERS ep){
+  PCONTEXT ctx = ep->ContextRecord;
+  //Valores SEH. Restauración de valores iniciales
+  ctx->Ebx = -1; 
+  ctx->Eip += 4;  
+  return EXCEPTION_CONTINUE_EXECUTION;
+  
+}
 #endif
