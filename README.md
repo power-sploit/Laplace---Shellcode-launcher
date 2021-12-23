@@ -1,6 +1,6 @@
 # Laplace - Shellcode-launcher
 
-![tumblr_8db1efec2b9cd1bfb467e31b7d5c3125_bf9b9112_540](https://user-images.githubusercontent.com/82961078/146617492-fd2733d1-14c6-4b4d-aa99-13e7b0b9512f.gif)
+![Polish_20211223_094627019](https://user-images.githubusercontent.com/82961078/147214000-b6e7d40c-a7d9-4196-89e0-f3fd377d0f88.jpg)
 
 
 Laplace es un launcher/Stub externo de shellcode runtime en desarrollo por un autodidacta, para el Spyware Medusa.
