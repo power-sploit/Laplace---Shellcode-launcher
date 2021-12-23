@@ -479,7 +479,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
 
 
     if(hyper) return TRUE;
-	#ifndef _WIN64
+	//#ifndef _WIN64
     __try{
 		_asm push ebx
         _asm mov  ebx, 0 
@@ -496,7 +496,7 @@ static BOOL CHECK_SPEC_VM_INFO(){
 	}
 	__except(VPC_EXCEPTION_HANDLER(GetExceptionInformation())){}
 	if(vpc) return TRUE;
-	#endif
+	//#endif
 	/*
 	COMUNICACIÓN ENTRE MÁQUINA VIRTUAL Y MÁQUINA FÍSICA;
 	
@@ -605,16 +605,16 @@ static BOOL CHECK_SPEC_VM_INFO(){
     las máquinas virtuales. 
     */
     
-	
+	#ifndef _WIN64
 
 	char idtr[6];
 	ULONG idt = 0;
 
 	//Almacenamos información sobre el IDT
 
-#ifndef _WIN64
+//#ifndef _WIN64
 	_asm sidt idtr
-#endif
+//#endif
 	idt = *((unsigned long *)&idtr[2]);
 	
 	if((idt) >> 24) == 0xff) return TRUE; //Direcciones en VM del IDTR. 
@@ -627,9 +627,9 @@ static BOOL CHECK_SPEC_VM_INFO(){
     char ldt[5] = "\xef\xbe\xad\xde";
     ULONG ldt = 0;
     
-    #ifndef _WIN64
+   // #ifndef _WIN64
     _asm sldt ldtr
-    #endif
+//    #endif
     ldt = *((unsigned long *)&ldtr[0]);
     if(ldt != 0xdead0000) return TRUE;
     
@@ -638,14 +638,15 @@ static BOOL CHECK_SPEC_VM_INFO(){
     char gdtr[6];
     ULONG gdt = 0;
     
-    #ifndef _WIN64
+   // #ifndef _WIN64
     _asm sgdt gdtr
-    #endif
+    //#endif
     
     gdt = *((unsigned long *)&gdtr[2]);
     
     if((gdt >> 24) == 0xff) return TRUE;
     
+    #endif
     
     /*
     El STR almacena el TR (que registra tareas). Estos administran las tareas en el procesador, similar a como lo haría
