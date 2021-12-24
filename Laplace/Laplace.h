@@ -29,7 +29,7 @@ using namespace std;
 
 struct GLOBAL_VAR{
 	BOOL CON_REALIZED = FALSE;
-	}extern GLOB, *PGLOB = &GLOB;
+	}static GLOB, *PGLOB = &GLOB;
 
 typedef WINSETUPAPI BOOL wBOOL;
 
