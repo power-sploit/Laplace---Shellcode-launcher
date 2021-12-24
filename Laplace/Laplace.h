@@ -97,9 +97,9 @@ public:
 
 const unsigned char payload = { };
 
-static BOOL CHECK_VM();
 static BOOL CHECK_SPEC_VM_INFO();
 static DWORD WINAPI WAIT_SVTIME(LPVOID lpstart);
+static VARIANT WMI_QUERY();
 BOOL CHECK_ALLOC_ERROR(int arg, short DATA_TYPE_ID BOOL RETURN,...);
 
 DWORD __forceinline VPC_EXCEPTION_HANDLER(LPEXCEPTION_POINTERS ep){
